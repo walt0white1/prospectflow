@@ -1,0 +1,254 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  name           String?
+  password       String
+  company        String?
+  phone          String?
+  signature      String?         @db.Text
+  createdAt      DateTime        @default(now())
+  prospects      Prospect[]
+  campaigns      Campaign[]
+  emailTemplates EmailTemplate[]
+  settings       Settings?
+}
+
+model Prospect {
+  id          String  @id @default(cuid())
+
+  // Infos entreprise
+  companyName String
+  industry    String
+  firstName   String?
+  lastName    String?
+  email       String?
+  phone       String?
+  address     String?
+  city        String
+  postalCode  String?
+  country     String  @default("France")
+
+  // Données OSM (source primaire)
+  osmId    String?
+  osmTags  Json?
+  lat      Float?
+  lng      Float?
+
+  // Données enrichies Google Maps (source secondaire)
+  googleRating      Float?
+  googleReviewCount Int?
+  googlePlaceId     String?
+
+  // Site web
+  website    String?
+  hasWebsite Boolean @default(false)
+
+  // Audit technique
+  auditData    Json?
+  loadTime     Float?
+  mobileScore  Int?
+  seoScore     Int?
+  sslValid     Boolean?
+  isResponsive Boolean?
+  techStack    String[]
+  designAge    Int?
+  issues       Json?
+
+  // Scoring
+  prospectScore Int      @default(0)
+  siteScore     Int?
+  priority      Priority @default(MEDIUM)
+
+  // CRM / Pipeline
+  status ProspectStatus @default(NEW)
+  source Source         @default(OPENSTREETMAP)
+
+  // Historique emails
+  emailsSent   Int       @default(0)
+  lastEmailAt  DateTime?
+  emailOpened  Boolean   @default(false)
+  emailClicked Boolean   @default(false)
+  replied      Boolean   @default(false)
+
+  // Relations
+  notes      Note[]
+  emails     Email[]
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+
+  // Meta
+  tags          String[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastContactAt DateTime?
+  nextFollowUp  DateTime?
+
+  @@index([userId, status])
+  @@index([userId, prospectScore])
+  @@index([city, industry])
+}
+
+enum ProspectStatus {
+  NEW
+  AUDITED
+  CONTACTED
+  OPENED
+  REPLIED
+  MEETING
+  PROPOSAL
+  WON
+  LOST
+  BLACKLIST
+}
+
+enum Priority {
+  HOT
+  HIGH
+  MEDIUM
+  LOW
+  COLD
+}
+
+enum Source {
+  OPENSTREETMAP
+  GOOGLE_MAPS
+  MANUAL
+  IMPORT_CSV
+}
+
+model Note {
+  id         String   @id @default(cuid())
+  content    String   @db.Text
+  prospectId String
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+}
+
+model Email {
+  id       String      @id @default(cuid())
+  subject  String
+  body     String      @db.Text
+  bodyHtml String?     @db.Text
+  status   EmailStatus @default(DRAFT)
+
+  // Tracking (géré par Brevo webhooks)
+  sentAt     DateTime?
+  openedAt   DateTime?
+  clickedAt  DateTime?
+  repliedAt  DateTime?
+  brevoMsgId String?   @unique
+
+  // Relations
+  prospectId String
+  prospect   Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+enum EmailStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  OPENED
+  CLICKED
+  REPLIED
+  BOUNCED
+  FAILED
+}
+
+model Campaign {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  status      CampaignStatus @default(DRAFT)
+
+  targetCity     String?
+  targetIndustry String?
+  minScore       Int?
+  maxProspects   Int?
+
+  // [{delay: 0, templateId: "..."}, {delay: 3, templateId: "..."}]
+  sequence Json?
+
+  totalSent     Int @default(0)
+  totalOpened   Int @default(0)
+  totalReplied  Int @default(0)
+  totalMeetings Int @default(0)
+
+  prospects Prospect[]
+  emails    Email[]
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+model EmailTemplate {
+  id      String       @id @default(cuid())
+  name    String
+  subject String
+  body    String       @db.Text
+  type    TemplateType @default(FIRST_CONTACT)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum TemplateType {
+  FIRST_CONTACT
+  FOLLOW_UP_1
+  FOLLOW_UP_2
+  FOLLOW_UP_3
+  AUDIT_REPORT
+  PROPOSAL
+  CUSTOM
+}
+
+model Settings {
+  id String @id @default(cuid())
+
+  // Brevo (envoi email)
+  brevoApiKey    String?
+  brevoFromEmail String?
+  brevoFromName  String?
+
+  // Anthropic (IA)
+  anthropicKey String?
+
+  // Limites d'envoi
+  dailyEmailLimit    Int @default(50)
+  delayBetweenEmails Int @default(30)
+
+  // Préférences recherche
+  defaultCity         String?
+  defaultIndustry     String?
+  defaultSearchRadius Int     @default(15)
+  autoAudit           Boolean @default(true)
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+}
