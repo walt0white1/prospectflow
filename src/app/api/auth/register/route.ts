@@ -27,8 +27,9 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({ id: user.id, email: user.email }, { status: 201 })
-  } catch (err) {
-    console.error('[register]', err)
+  } catch (err: unknown) {
+    const e = err as any
+    console.error('[register] name:', e?.name, '| msg:', e?.message?.slice(0, 200), '| code:', e?.code, '| meta:', JSON.stringify(e?.meta))
     return NextResponse.json(
       { error: 'Erreur serveur. Vérifiez que la base de données est configurée.' },
       { status: 500 },

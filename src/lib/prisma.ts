@@ -13,7 +13,8 @@ function createPrismaClient(): PrismaClient | undefined {
     const pool = new pg.Pool({ connectionString, ssl: { rejectUnauthorized: false } })
     const adapter = new PrismaPg(pool)
     return new PrismaClient({ adapter } as any)
-  } catch {
+  } catch (e: unknown) {
+    console.error('[prisma init error]', (e as any)?.message?.slice(0, 200))
     return undefined
   }
 }
